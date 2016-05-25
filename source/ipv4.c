@@ -9,12 +9,12 @@
  */
 #include "ipv4.h"
 
-err_t ipv4_find_node(uint32_t ip_addr, struct net_card *net_card)
+err_t ipv4_find_node(uint32_t ip_addr, struct netcard *netcard)
 {
 	err_t ret = -1;
 	struct ipv4_node *pnode;
 
-	LIST_FOR_EACH_ENTRY(pnode, net_card->ipv4_list, struct ipv4_node, list) {
+	LIST_FOR_EACH_ENTRY(pnode, netcard->ipv4_list, struct ipv4_node, list) {
 		if (pnode->addr == ip_addr) {
 			ret = 0;
 			break;

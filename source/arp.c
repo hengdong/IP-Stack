@@ -49,6 +49,7 @@ STRUCT_END_FIRST
 /* the ARP protocol size */
 #define ARP_PROTO_SIZE_NOMAL 4
 
+/* the ARP opcode */
 #define ARP_OPCODE_REQUEST 0x0001
 #define ARP_OPCODE_REPLY 0x0002
 
@@ -60,29 +61,43 @@ STRUCT_END_FIRST
 #define GET_ARP_PROTO_TYPE(arp) ((arp)->proto_type)
 #define GET_ARP_PROTO_SIZE(arp) ((arp)->proto_size)
 #define GET_ARP_OPCODE(arp) ((arp)->op_code)
+#define GET_ARP_SRC_MAC_POINT(arp) ((arp)->src_mac0t3)
+#define GET_ARP_SRC_IP_POINT(arp) ((arp)->src_ip0t1)
+#define GET_ARP_DEST_MAC_POINT(arp) ((arp)->dest_mac0t1)
+#define GET_ARP_DEST_IP_POINT(arp) ((arp)->dest_ip)
 
 #define PRINT_SHOW_DEST_MAC(arp) \
 	(arp)->dest_mac0t1[0], (arp)->dest_mac0t1[1], (arp)->dest_mac2t5[0], \
 	(arp)->dest_mac2t5[1], (arp)->dest_mac2t5[2], (arp)->dest_mac2t5[3]
 
+#define PRINT_SHOW_SRC_MAC(arp) \
+		(arp)->src_mac0t3[0], (arp)->src_mac0t3[1], (arp)->src_mac0t3[2], \
+		(arp)->src_mac0t3[3], (arp)->src_mac4t5[0], (arp)->src_mac4t5[1]
 
 #define CHECK_ARP_HW_TYPE(arp, type) (GET_ARP_HW_TYPE((arp)) == (type))
 #define CHECK_ARP_MAC_SIZE(arp, size) (GET_ARP_MAC_SIZE((arp)) == (size))
 #define CHECK_ARP_PROTO_TYPE(arp, type) (GET_ARP_PROTO_TYPE((arp)) == (type))
 #define CHECK_ARP_PROTO_SIZE(arp, size) (GET_ARP_PROTO_SIZE((arp)) == (size))
 
-#define TRANS_ARP_DEST_IPADDR(addr, arp) MEMCPPY((&addr), (arp)->dest_ip, 4)
+#define SET_ARP_OPCODE(arp, opcode) GET_ARP_OPCODE((arp)) = (opcode)
+#define SET_ARP_SRC_MAC(arp, mac) MEMCPY(GET_ARP_SRC_MAC_POINT(arp), (&mac), 6)
+#define SET_ARP_SRC_IP(arp, ip) MEMCPY(GET_ARP_SRC_IP_POINT(arp), (&ip), 4)
+#define SET_ARP_DEST_MAC(arp, mac) MEMCPY(GET_ARP_DEST_MAC_POINT(arp), (&mac), 6)
+#define SET_ARP_DEST_IP(arp, ip) MEMCPY(GET_ARP_DEST_IP_POINT(arp), (&ip), 4)
+
+#define TRANS_ARP_DEST_IPADDR(addr, arp) MEMCPY((&addr), GET_ARP_DEST_IP_POINT(arp), (4))
+#define TRANS_ARP_DEST_MAC(mac, arp) MEMCPY((&mac), GET_ARP_DEST_MAC_POINT(arp), (6))
 
 /*********************************************************************************/
 /*********************************************************************************/
 
-err_t arp_input(const uint8_t *pbuff, uint16_t size,struct net_card *net_card)
+err_t arp_input(const uint8_t *pbuff, uint16_t size,struct netcard *netcard)
 {
 	struct arp_fhr *arp_fhr;
 	err_t ret;
 	uint32_t local_ip;
 
-	if (pbuff < ARP_PKG_SIZE) {
+	if (size < ARP_PKG_SIZE) {
 		DEBUG_ARP_LAYER("ARP size error\n");
 		ret = 0;
 		goto gret;
@@ -101,8 +116,8 @@ err_t arp_input(const uint8_t *pbuff, uint16_t size,struct net_card *net_card)
 	}
 
 	TRANS_ARP_DEST_IPADDR(local_ip, arp_fhr);
-	if (ipv4_find_node(net_card, local_ip)) {
-		DEBUG_ARP_LAYER("ARP is not for us, desertion MAC is [%d.%d.%d.%d.%d.%d]\n",
+	if (ipv4_find_node(netcard, local_ip)) {
+		DEBUG_ARP_LAYER("ARP is not for us, desertion MAC:[%d.%d.%d.%d.%d.%d]\n",
 				PRINT_SHOW_DEST_MAC(arp_fhr));
 		ret = 0;
 		goto gret;
@@ -111,6 +126,16 @@ err_t arp_input(const uint8_t *pbuff, uint16_t size,struct net_card *net_card)
 	DEBUG_ARP_LAYER("ARP opcode:[%d]\n", GET_ARP_OPCODE(arp_fhr));
 	switch(GET_ARP_OPCODE(arp_fhr)) {
 		case ARP_OPCODE_REQUEST:
+			DEBUG_ARP_LAYER("send ARP reply to MAC:[%d.%d.%d.%d.%d.%d]\n",
+					PRINT_SHOW_SRC_MAC(arp_fhr));
+
+			SET_ARP_OPCODE(arp_fhr, ARP_OPCODE_REPLY);
+			SET_ARP_DEST_MAC(arp_fhr, GET_ARP_SRC_MAC_POINT(arp_fhr));
+			SET_ARP_DEST_IP(arp_fhr, GET_ARP_SRC_IP_POINT(arp_fhr));
+			SET_ARP_SRC_MAC(arp_fhr, netcard_get_mac(netcard));
+			SET_ARP_SRC_IP(arp_fhr, &local_ip);
+
+			ret = ethernet_output(pbuff);
 			break;
 
 		case ARP_OPCODE_REPLY:

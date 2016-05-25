@@ -10,6 +10,6 @@ struct ipv4_node{
 	uint32_t gate;
 };
 
-err_t ipv4_find_node(uint32_t ip_addr, struct net_card *net_card);
+err_t ipv4_find_node(uint32_t ip_addr, struct netcard *netcard);
 
 #endif
